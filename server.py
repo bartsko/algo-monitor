@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import requests
 
@@ -16,12 +16,18 @@ app.add_middleware(
 NODE_API_URL = "https://mainnet-api.algonode.cloud/v2/accounts"
 STATUS_API_URL = "https://mainnet-api.algonode.cloud/v2/status"
 
+# Trasa główna dla testów (zapobiegnie 404 Not Found)
+@app.get("/")
+def home():
+    return {"message": "Algorand Node Monitor API is running"}
+
+# Pobieranie danych o koncie
 @app.get("/node-account")
 def get_node_account(account: str):
     response = requests.get(f"{NODE_API_URL}/{account}")
 
     if response.status_code != 200:
-        return {"error": "Nie znaleziono konta lub błędna odpowiedź API"}
+        raise HTTPException(status_code=404, detail="Nie znaleziono konta lub błędna odpowiedź API")
 
     data = response.json()
 
@@ -34,12 +40,18 @@ def get_node_account(account: str):
 
     return {"account": account_info}
 
+# Pobieranie ostatniego bloku
 @app.get("/last-round")
 def get_last_round():
     response = requests.get(STATUS_API_URL)
 
     if response.status_code != 200:
-        return {"error": "Nie można pobrać danych o bloku"}
+        raise HTTPException(status_code=500, detail="Nie można pobrać danych o bloku")
 
     data = response.json()
     return {"last_round": data["last-round"]}
+
+# Uruchamianie serwera na Render
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

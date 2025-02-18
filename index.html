@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitorowanie Węzła Algorand</title>
+    <style>
+        body {
+            background-color: #0f0f0f;
+            color: #d0a8ff;
+            font-family: monospace;
+            text-align: center;
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+            padding: 20px;
+            border: 2px solid #5c4b99;
+            border-radius: 10px;
+            background-color: #111;
+            box-shadow: 0px 0px 20px #5c4b99;
+        }
+        .input-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        input, button {
+            font-size: 16px;
+            font-family: monospace;
+            padding: 8px;
+            border-radius: 5px;
+            border: none;
+        }
+        input {
+            width: 100%;
+            background-color: #1a1a1a;
+            color: #00ff00;
+            text-align: center;
+        }
+        button {
+            background-color: #98c379;
+            color: #000;
+            cursor: pointer;
+            margin-top: 5px;
+        }
+        .info-bar {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            background-color: #222;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        .info-bar span {
+            font-weight: bold;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #111;
+        }
+        th, td {
+            border: 1px solid #5c4b99;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #1a1a1a;
+            color: #5c4b99;
+        }
+        td {
+            color: #00ff00;
+        }
+        .status-active {
+            color: limegreen;
+        }
+        .status-inactive {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Monitorowanie Węzła Algorand</h1>
+        <div class="input-container">
+            <input type="text" id="account" placeholder="Wpisz adres portfela Algorand">
+            <button onclick="fetchData()">Sprawdź</button>
+        </div>
+        <div class="info-bar">
+            <span>Ostatni Blok: <span id="last-block">Loading...</span></span>
+            <span>Status: <span id="node-status" class="status-inactive">Loading...</span></span>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Właściwość</th>
+                    <th>Wartość</th>
+                </tr>
+            </thead>
+            <tbody id="output">
+                <!-- Dane pojawią się tutaj -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        function fetchData() {
+            let account = document.getElementById("account").value;
+            fetch(`http://localhost:8000/node-account?account=${account}`)
+                .then(response => response.json())
+                .then(data => {
+                    let output = document.getElementById("output");
+                    output.innerHTML = "";
+
+                    if (data.error) {
+                        output.innerHTML = `<tr><td colspan="2" style="color: red; font-weight: bold;">${data.error}</td></tr>`;
+                        return;
+                    }
+
+                    let accountInfo = data.account;
+                    let properties = [
+                        { name: "Adres", value: accountInfo.address },
+                        { name: "Saldo (microAlgos)", value: accountInfo.amount },
+                        { name: "Status", value: accountInfo.status },
+                        { name: "Uczestniczy w konsensusie", value: accountInfo["vote-participation"] }
+                    ];
+
+                    properties.forEach(prop => {
+                        let row = `<tr><td>${prop.name}</td><td>${prop.value}</td></tr>`;
+                        output.innerHTML += row;
+                    });
+
+                    // Aktualizacja statusu sieci
+                    let statusElement = document.getElementById("node-status");
+                    if (accountInfo.status === "Online") {
+                        statusElement.innerText = "RUNNING";
+                        statusElement.classList.remove("status-inactive");
+                        statusElement.classList.add("status-active");
+                    } else {
+                        statusElement.innerText = "INACTIVE";
+                        statusElement.classList.remove("status-active");
+                        statusElement.classList.add("status-inactive");
+                    }
+                })
+                .catch(error => {
+                    document.getElementById("output").innerHTML = `<tr><td colspan="2" style="color: red; font-weight: bold;">Błąd: ${error}</td></tr>`;
+                });
+        }
+
+        function updateLastBlock() {
+            fetch("http://localhost:8000/last-round")
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById("last-block").innerText = data.last_round;
+                })
+                .catch(() => {
+                    document.getElementById("last-block").innerText = "Błąd pobierania";
+                });
+        }
+
+        setInterval(updateLastBlock, 5000);
+    </script>
+</body>
+</html>

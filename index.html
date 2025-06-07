@@ -2,7 +2,6 @@
 <html lang="pl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Monitorowanie Węzła Algorand</title>
   <style>
     body {
@@ -10,37 +9,54 @@
       color: #d0a8ff;
       font-family: monospace;
       text-align: center;
-      margin: 20px;
     }
-    input, button {
-      font-family: monospace;
-      font-size: 18px;
-      padding: 10px;
-      margin: 5px;
-      border-radius: 5px;
-      border: none;
+    .container {
+      max-width: 800px;
+      margin: auto;
+      padding: 20px;
+      border: 2px solid #5c4b99;
+      border-radius: 10px;
+      background-color: #111;
+      box-shadow: 0px 0px 20px #5c4b99;
     }
     input {
-      width: 400px;
+      font-size: 18px;
+      padding: 8px;
+      border-radius: 5px;
+      border: none;
+      margin-bottom: 10px;
       background-color: #1a1a1a;
       color: #00ff00;
+      width: 60%;
     }
     button {
-      background-color: #a5d6a7;
+      font-size: 18px;
+      padding: 8px 20px;
+      border-radius: 5px;
+      border: none;
+      background-color: #98c379;
+      color: #000;
       cursor: pointer;
+      margin-left: 10px;
     }
-    .status-online { color: #00ff00; }
-    .status-offline { color: red; }
+    .status-online {
+      color: #00ff00;
+      font-weight: bold;
+    }
+    .status-offline {
+      color: #ff4d4d;
+      font-weight: bold;
+    }
     table {
-      width: 90%;
-      margin: 20px auto;
+      width: 100%;
+      margin-top: 20px;
       border-collapse: collapse;
       background-color: #111;
-      box-shadow: 0 0 20px #5c4b99;
+      box-shadow: 0px 0px 20px #5c4b99;
     }
     th, td {
-      padding: 10px;
       border: 1px solid #5c4b99;
+      padding: 8px;
     }
     th {
       background-color: #1a1a1a;
@@ -49,69 +65,84 @@
     td {
       color: #00ff00;
     }
+    h1, h2 {
+      margin: 20px 0;
+    }
   </style>
 </head>
 <body>
-  <h1>Monitorowanie Węzła Algorand</h1>
-  <input type="text" id="address" placeholder="Wpisz adres portfela">
-  <button onclick="checkNode()">Sprawdź</button>
+  <div class="container">
+    <h1>Monitorowanie Węzła Algorand</h1>
+    <input type="text" id="address" placeholder="Wpisz adres portfela">
+    <button onclick="loadData()">Sprawdź</button>
 
-  <div id="node-info"></div>
+    <div id="status-section" style="margin-top: 20px;">
+      <h2>Status węzła: <span id="node-status" class="status-offline">Nieznany</span></h2>
+      <div id="account-data"></div>
+    </div>
 
-  <h2>Kalendarz Otrzymanych Nagród</h2>
-  <table id="rewards-table">
-    <thead>
-      <tr>
-        <th>Data</th>
-        <th>Nagroda (ALGO)</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+    <h2>Kalendarz Otrzymanych Nagród</h2>
+    <table id="rewards-table">
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th>Nagroda (ALGO)</th>
+        </tr>
+      </thead>
+      <tbody id="rewards-body">
+        <tr><td colspan="2">Brak danych</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <script>
-    const API_BASE = 'https://algo-monitor.onrender.com'; // <--- Twój backend
+    const API_URL = "https://algo-monitor.onrender.com"; // <-- Twój backend Render
 
-    function checkNode() {
-      const address = document.getElementById('address').value.trim();
-      if (!address) return alert('Wpisz adres portfela');
+    async function loadData() {
+      const address = document.getElementById('address').value;
+      if (!address) return alert("Wpisz adres!");
 
-      // Dane o koncie
-      fetch(`${API_BASE}/account/${address}`)
-        .then(res => res.json())
-        .then(data => {
-          let info = `
-            <p>Status węzła: <span class="${data.status === 'Online' ? 'status-online' : 'status-offline'}">${data.status}</span></p>
-            <p>Saldo: ${data.balance.toFixed(6)} ALGO</p>
-            <p>Pending rewards: ${data.pending_rewards.toFixed(6)} ALGO</p>
-            <p>Czas od ostatniego bloku: ${data.last_block_time.toFixed(1)} sekund</p>
-          `;
-          document.getElementById('node-info').innerHTML = info;
-        })
-        .catch(err => {
-          console.error(err);
-          alert('Błąd ładowania danych o koncie!');
-        });
+      // Wyczyść stare dane
+      document.getElementById('account-data').innerHTML = "";
+      document.getElementById('rewards-body').innerHTML = "<tr><td colspan='2'>Ładowanie...</td></tr>";
 
-      // Dane o nagrodach
-      fetch(`${API_BASE}/rewards/${address}`)
-        .then(res => res.json())
-        .then(data => {
-          const tbody = document.querySelector('#rewards-table tbody');
-          tbody.innerHTML = '';
-          if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="2">Brak danych</td></tr>';
-            return;
-          }
-          data.forEach(tx => {
-            const row = `<tr><td>${tx.date}</td><td>${tx.amount.toFixed(6)}</td></tr>`;
-            tbody.innerHTML += row;
-          });
-        })
-        .catch(err => {
-          console.error(err);
-          alert('Błąd ładowania nagród!');
-        });
+      try {
+        // Fetch account info
+        const resAcc = await fetch(`${API_URL}/account/${address}`);
+        const account = await resAcc.json();
+
+        document.getElementById('node-status').innerText = account.status;
+        if (account.status === "Online") {
+          document.getElementById('node-status').className = 'status-online';
+        } else {
+          document.getElementById('node-status').className = 'status-offline';
+        }
+
+        document.getElementById('account-data').innerHTML = `
+          <p>Saldo: ${account.balance.toFixed(6)} ALGO</p>
+          <p>Pending rewards: ${account.pending_rewards.toFixed(6)} ALGO</p>
+        `;
+
+        // Fetch rewards
+        const resRewards = await fetch(`${API_URL}/rewards/${address}`);
+        const rewards = await resRewards.json();
+
+        if (rewards.length === 0) {
+          document.getElementById('rewards-body').innerHTML = "<tr><td colspan='2'>Brak nagród</td></tr>";
+        } else {
+          document.getElementById('rewards-body').innerHTML = rewards.map(r => `
+            <tr>
+              <td>${r.date}</td>
+              <td>${r.amount.toFixed(6)}</td>
+            </tr>
+          `).join('');
+        }
+
+      } catch (error) {
+        console.error(error);
+        document.getElementById('account-data').innerHTML = "<p>Błąd ładowania danych!</p>";
+        document.getElementById('rewards-body').innerHTML = "<tr><td colspan='2'>Błąd ładowania danych</td></tr>";
+      }
     }
   </script>
 </body>

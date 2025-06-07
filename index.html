@@ -1,120 +1,118 @@
 <!DOCTYPE html>
 <html lang="pl">
 <head>
-    <meta charset="UTF-8">
-    <title>Monitorowanie Węzła Algorand</title>
-    <style>
-        body {
-            background-color: #0d0d0d;
-            font-family: monospace;
-            color: #c9a6ff;
-            text-align: center;
-            padding: 30px;
-        }
-        input {
-            padding: 8px;
-            font-size: 16px;
-            width: 400px;
-            border-radius: 5px;
-            border: none;
-            text-align: center;
-            color: #00ff00;
-            background-color: #1e1e1e;
-        }
-        button {
-            padding: 8px 15px;
-            font-size: 18px;
-            border: none;
-            border-radius: 5px;
-            margin-left: 10px;
-            cursor: pointer;
-            background-color: #a3d977;
-        }
-        table {
-            width: 80%;
-            margin: 20px auto;
-            border-collapse: collapse;
-            box-shadow: 0 0 20px #9f70ff;
-        }
-        th, td {
-            padding: 10px;
-            border: 1px solid #5c4b99;
-        }
-        th {
-            background-color: #1a1a1a;
-        }
-        .status-online {
-            color: #00ff00;
-        }
-        .status-offline {
-            color: red;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Monitorowanie Węzła Algorand</title>
+  <style>
+    body {
+      background-color: #0f0f0f;
+      color: #d0a8ff;
+      font-family: monospace;
+      text-align: center;
+      margin: 20px;
+    }
+    input, button {
+      font-family: monospace;
+      font-size: 18px;
+      padding: 10px;
+      margin: 5px;
+      border-radius: 5px;
+      border: none;
+    }
+    input {
+      width: 400px;
+      background-color: #1a1a1a;
+      color: #00ff00;
+    }
+    button {
+      background-color: #a5d6a7;
+      cursor: pointer;
+    }
+    .status-online { color: #00ff00; }
+    .status-offline { color: red; }
+    table {
+      width: 90%;
+      margin: 20px auto;
+      border-collapse: collapse;
+      background-color: #111;
+      box-shadow: 0 0 20px #5c4b99;
+    }
+    th, td {
+      padding: 10px;
+      border: 1px solid #5c4b99;
+    }
+    th {
+      background-color: #1a1a1a;
+      color: #d0a8ff;
+    }
+    td {
+      color: #00ff00;
+    }
+  </style>
 </head>
 <body>
-    <h1>Monitorowanie Węzła Algorand</h1>
-    <div>
-        <input id="address" type="text" placeholder="Wpisz adres portfela" />
-        <button onclick="loadData()">Sprawdź</button>
-    </div>
+  <h1>Monitorowanie Węzła Algorand</h1>
+  <input type="text" id="address" placeholder="Wpisz adres portfela">
+  <button onclick="checkNode()">Sprawdź</button>
 
-    <div id="info">
-        <h2>Status węzła: <span id="status" class="status-offline">Nieznany</span></h2>
-        <div id="details"></div>
-    </div>
+  <div id="node-info"></div>
 
-    <h2>Kalendarz Otrzymanych Nagród</h2>
-    <table id="rewards">
-        <thead>
-            <tr><th>Data</th><th>Nagroda (ALGO)</th></tr>
-        </thead>
-        <tbody>
-            <tr><td colspan="2">Brak danych</td></tr>
-        </tbody>
-    </table>
+  <h2>Kalendarz Otrzymanych Nagród</h2>
+  <table id="rewards-table">
+    <thead>
+      <tr>
+        <th>Data</th>
+        <th>Nagroda (ALGO)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
-    <script>
-        const API_URL = "https://algo-monitor.onrender.com"; // <-- zmień jeśli inny backend
+  <script>
+    const API_BASE = 'https://twoj-backend.onrender.com'; // <- zamień na swój
 
-        async function loadData() {
-            const address = document.getElementById('address').value;
+    function checkNode() {
+      const address = document.getElementById('address').value.trim();
+      if (!address) return alert('Wpisz adres portfela');
 
-            try {
-                const res = await fetch(`${API_URL}/account-info?address=${address}`);
-                const data = await res.json();
+      // Dane o koncie
+      fetch(`${API_BASE}/account/${address}`)
+        .then(res => res.json())
+        .then(data => {
+          let info = `
+            <p>Status węzła: <span class="${data.status === 'Online' ? 'status-online' : 'status-offline'}">${data.status}</span></p>
+            <p>Saldo: ${data.balance.toFixed(6)} ALGO</p>
+            <p>Pending rewards: ${data.pending_rewards.toFixed(6)} ALGO</p>
+            <p>Czas od ostatniego bloku: ${data.last_block_time.toFixed(1)} sekund</p>
+          `;
+          document.getElementById('node-info').innerHTML = info;
+        })
+        .catch(err => {
+          console.error(err);
+          alert('Błąd ładowania danych o koncie!');
+        });
 
-                document.getElementById('status').innerText = data.registered_for_rewards ? "Online" : "Offline";
-                document.getElementById('status').className = data.registered_for_rewards ? "status-online" : "status-offline";
-
-                document.getElementById('details').innerHTML = `
-                    Saldo: ${data.balance.toFixed(6)} ALGO<br/>
-                    Pending rewards: ${data.pending_rewards.toFixed(6)} ALGO<br/>
-                    Czas od ostatniego bloku: ${data.last_block_time.toFixed(1)} sekund
-                `;
-
-            } catch (error) {
-                document.getElementById('details').innerText = "Błąd ładowania danych!";
-            }
-
-            try {
-                const res = await fetch(`${API_URL}/reward-history?address=${address}`);
-                const rewardsData = await res.json();
-
-                const tbody = document.querySelector('#rewards tbody');
-                tbody.innerHTML = "";
-
-                if (rewardsData.rewards.length === 0) {
-                    tbody.innerHTML = "<tr><td colspan='2'>Brak nagród</td></tr>";
-                } else {
-                    rewardsData.rewards.forEach(reward => {
-                        const row = `<tr><td>${reward.date}</td><td>${reward.amount.toFixed(6)}</td></tr>`;
-                        tbody.innerHTML += row;
-                    });
-                }
-            } catch (error) {
-                document.querySelector('#rewards tbody').innerHTML = "<tr><td colspan='2'>Błąd ładowania danych</td></tr>";
-            }
-        }
-    </script>
+      // Dane o nagrodach
+      fetch(`${API_BASE}/rewards/${address}`)
+        .then(res => res.json())
+        .then(data => {
+          const tbody = document.querySelector('#rewards-table tbody');
+          tbody.innerHTML = '';
+          if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="2">Brak danych</td></tr>';
+            return;
+          }
+          data.forEach(tx => {
+            const row = `<tr><td>${tx.date}</td><td>${tx.amount.toFixed(6)}</td></tr>`;
+            tbody.innerHTML += row;
+          });
+        })
+        .catch(err => {
+          console.error(err);
+          alert('Błąd ładowania nagród!');
+        });
+    }
+  </script>
 </body>
 </html>

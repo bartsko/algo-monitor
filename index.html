@@ -1,103 +1,78 @@
 <!DOCTYPE html>
 <html lang="pl">
 <head>
-    <meta charset="UTF-8">
-    <title>Monitorowanie Węzła Algorand</title>
-    <style>
-        body {
-            background-color: #0f0f0f;
-            color: #d0a8ff;
-            font-family: monospace;
-            text-align: center;
-        }
-        input, button {
-            font-family: monospace;
-            margin: 5px;
-        }
-        .online {
-            color: limegreen;
-        }
-        .offline {
-            color: red;
-        }
-        table {
-            margin: auto;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        table, th, td {
-            border: 1px solid #5c4b99;
-        }
-        th, td {
-            padding: 8px;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Monitorowanie Węzła Algorand</title>
+  <style>
+    body {
+      background-color: #0f0f0f;
+      color: #d0a8ff;
+      font-family: monospace;
+      text-align: center;
+    }
+    input, button {
+      margin: 5px;
+      font-family: monospace;
+    }
+    .status-active {
+      color: limegreen;
+    }
+    .status-inactive {
+      color: red;
+    }
+  </style>
 </head>
 <body>
+  <h1>Monitorowanie Węzła Algorand</h1>
+  <input type="text" id="account" placeholder="Wpisz adres portfela Algorand" />
+  <button onclick="fetchData()">Sprawdź</button>
 
-    <h2>Monitorowanie Węzła Algorand</h2>
-    <input type="text" id="addressInput" placeholder="Wpisz adres portfela" size="60">
-    <button onclick="checkStatus()">Sprawdź</button>
+  <h2>Status Węzła</h2>
+  <div id="node-status" class="status-inactive">Loading...</div>
 
-    <h3>Status Węzła</h3>
-    <div id="status" class="offline">Offline</div>
+  <h2>Czas od ostatniego bloku</h2>
+  <div id="last-block">Loading...</div>
 
-    <h3>Średnia Liczba transakcji na blok</h3>
-    <div id="averageTx">...</div>
+  <script>
+    const API_BASE = "https://algo-monitor.onrender.com"; // Twój backend
 
-    <h3>Czas od ostatniego bloku</h3>
-    <div id="blockTimer">...</div>
+    function fetchData() {
+      let account = document.getElementById("account").value;
+      fetch(`${API_BASE}/node-account?account=${account}`)
+        .then((response) => response.json())
+        .then((data) => {
+          let statusElement = document.getElementById("node-status");
 
-    <h3>Kalendarz otrzymanych nagród</h3>
-    <table>
-        <thead>
-            <tr><th>Data nagrody</th></tr>
-        </thead>
-        <tbody id="rewardCalendar"></tbody>
-    </table>
+          // Jeśli registered-for-rewards = true → RUNNING
+          if (data.account["registered-for-rewards"]) {
+            statusElement.innerText = "RUNNING";
+            statusElement.classList.remove("status-inactive");
+            statusElement.classList.add("status-active");
+          } else {
+            statusElement.innerText = "INACTIVE";
+            statusElement.classList.remove("status-active");
+            statusElement.classList.add("status-inactive");
+          }
+        })
+        .catch((error) => {
+          document.getElementById("node-status").innerText = "Błąd: " + error;
+        });
+    }
 
-    <script>
-        const API_BASE = "https://algo-monitor.onrender.com";
+    function updateLastBlock() {
+      fetch(`${API_BASE}/last-round`)
+        .then((response) => response.json())
+        .then((data) => {
+          document.getElementById("last-block").innerText = `Ostatni blok: ${data.last_round}`;
+        })
+        .catch(() => {
+          document.getElementById("last-block").innerText = "Błąd pobierania bloku";
+        });
+    }
 
-        async function checkStatus() {
-            const address = document.getElementById("addressInput").value;
-
-            // Sprawdzenie statusu
-            const statusRes = await fetch(`${API_BASE}/node-status?address=${address}`);
-            const statusData = await statusRes.json();
-            const statusDiv = document.getElementById("status");
-            if (statusData.status === "Online") {
-                statusDiv.innerText = "Online";
-                statusDiv.className = "online";
-            } else {
-                statusDiv.innerText = "Offline";
-                statusDiv.className = "offline";
-            }
-
-            // Średnia liczba transakcji na blok
-            const txRes = await fetch(`${API_BASE}/average-tx`);
-            const txData = await txRes.json();
-            document.getElementById("averageTx").innerText = `Średnia transakcji: ${txData.average_tx.toFixed(2)}`;
-
-            // Czas od ostatniego bloku
-            const timerRes = await fetch(`${API_BASE}/block-timer`);
-            const timerData = await timerRes.json();
-            document.getElementById("blockTimer").innerText = `${(timerData.seconds / 1000000).toFixed(1)} sekund od ostatniego bloku`;
-
-            // Kalendarz nagród
-            const rewardsRes = await fetch(`${API_BASE}/reward-calendar?address=${address}`);
-            const rewardsData = await rewardsRes.json();
-            const calendar = document.getElementById("rewardCalendar");
-            calendar.innerHTML = "";
-            rewardsData.reward_dates.forEach(date => {
-                const row = document.createElement("tr");
-                const cell = document.createElement("td");
-                cell.innerText = date;
-                row.appendChild(cell);
-                calendar.appendChild(row);
-            });
-        }
-    </script>
-
+    setInterval(updateLastBlock, 5000);
+    updateLastBlock(); // Pierwsze wywołanie od razu
+  </script>
 </body>
 </html>

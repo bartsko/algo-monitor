@@ -1,8 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import requests
-from datetime import datetime, timezone
-import time
+from datetime import datetime
 
 app = FastAPI()
 
@@ -15,6 +14,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# API Endpoints
 ALGOD_NODE = "https://mainnet-api.algonode.cloud"
 INDEXER_NODE = "https://mainnet-idx.algonode.cloud"
 REWARDS_ADDRESS = "Y76M3MSY6DKBRHBL7C3NNDXGS5IIMQVQVUAB6MP4XEMMGVF2QWNPL226CA"
@@ -72,6 +72,6 @@ async def get_rewards(address: str):
                 "amount": amount / 1e6
             })
 
-    # Sortujemy od najnowszych
+    # Sort od najnowszych
     rewards = sorted(rewards, key=lambda x: x["date"], reverse=True)
     return rewards

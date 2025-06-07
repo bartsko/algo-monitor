@@ -53,11 +53,24 @@
             border-radius: 5px;
             width: 100px;
         }
+        input {
+            width: 400px;
+            padding: 10px;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Monitorowanie Węzła Algorand</h1>
+
+        <!-- Wprowadź adres -->
+        <div class="section">
+            <h2>Sprawdź inny adres</h2>
+            <input type="text" id="addressInput" placeholder="Wpisz adres Algorand">
+            <button onclick="updateAll()">Sprawdź</button>
+        </div>
 
         <!-- Status Węzła -->
         <div class="section">
@@ -96,10 +109,14 @@
     </div>
 
     <script>
-        const API_BASE = "https://algo-monitor.onrender.com"; // <- Twój działający backend
+        const API_BASE = "https://algo-monitor.onrender.com";
+
+        function getAddress() {
+            return document.getElementById("addressInput").value.trim();
+        }
 
         function updateStatus() {
-            fetch(`${API_BASE}/node-status`)
+            fetch(`${API_BASE}/node-status?address=${getAddress()}`)
                 .then(response => response.json())
                 .then(data => {
                     const statusDiv = document.getElementById("node-status");
@@ -128,7 +145,7 @@
         }
 
         function loadRecentTransactions() {
-            fetch(`${API_BASE}/recent-transactions`)
+            fetch(`${API_BASE}/recent-transactions?address=${getAddress()}`)
                 .then(response => response.json())
                 .then(data => {
                     const tbody = document.getElementById("recentTransactions").querySelector("tbody");
@@ -152,7 +169,7 @@
         }
 
         function loadRewardCalendar() {
-            fetch(`${API_BASE}/reward-calendar`)
+            fetch(`${API_BASE}/reward-calendar?address=${getAddress()}`)
                 .then(response => response.json())
                 .then(data => {
                     const calendarDiv = document.getElementById("rewardCalendar");
@@ -166,11 +183,15 @@
                 });
         }
 
-        updateStatus();
+        function updateAll() {
+            updateStatus();
+            loadRecentTransactions();
+            loadRewardCalendar();
+        }
+
+        // Initial load
         loadTransactionsChart();
-        loadRecentTransactions();
         startBlockTimer();
-        loadRewardCalendar();
     </script>
 </body>
 </html>

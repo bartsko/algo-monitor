@@ -1,11 +1,10 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import requests
-from datetime import datetime
 
 app = FastAPI()
 
-# CORS
+# Pozwalamy na połączenia z dowolnej domeny (ważne dla frontendów na Vercel)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,61 +13,57 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-ALGOD_API_URL = "https://mainnet-api.algonode.cloud/v2"
-INDEXER_API_URL = "https://mainnet-idx.algonode.cloud/v2"
-REWARDS_SENDER = "Y76M3MSY6DKBRHBL7C3NNDXGS5IIMQVQVUAB6MP4XEMMGVF2QWNPL226CA"
+# API Algorand - Algonode
+ALGOD_API = "https://mainnet-api.algonode.cloud/v2"
+INDEXER_API = "https://mainnet-idx.algonode.cloud/v2"
+REWARD_SENDER = "Y76M3MSY6DKBRHBL7C3NNDXGS5IIMQVQVUAB6MP4XEMMGVF2QWNPL226CA"
 
 @app.get("/")
 def root():
     return {"message": "Algorand Node Monitor API is running"}
 
-@app.get("/node-info")
-def get_node_info(account: str):
-    response = requests.get(f"{ALGOD_API_URL}/accounts/{account}")
+@app.get("/node-status/{address}")
+def get_node_status(address: str):
+    response = requests.get(f"{ALGOD_API}/accounts/{address}")
     if response.status_code != 200:
-        raise HTTPException(status_code=404, detail="Nie znaleziono konta lub błędna odpowiedź API")
-
+        raise HTTPException(status_code=404, detail="Nie znaleziono konta")
+    
     data = response.json()
-
-    account_info = {
-        "status": "Online" if data.get("account", {}).get("status") == "Online" else "Offline",
-        "amount": data.get("account", {}).get("amount", 0) / 1_000_000,
-        "pending_rewards": data.get("account", {}).get("pending-rewards", 0) / 1_000_000
+    return {
+        "address": data["address"],
+        "amount": data["amount"],
+        "status": data.get("status", "Offline"),
+        "pending-rewards": data.get("pending-rewards", 0)
     }
 
-    return account_info
-
-@app.get("/rewards-calendar")
-def get_rewards_calendar(account: str):
-    url = (
-        f"{INDEXER_API_URL}/accounts/{account}/transactions"
-        f"?tx-type=pay"
-        f"&limit=1000"   # Pobieramy więcej transakcji, nie tylko ostatnie 50
-    )
-    response = requests.get(url)
-
+@app.get("/last-round")
+def get_last_round_time():
+    response = requests.get(f"{ALGOD_API}/status")
     if response.status_code != 200:
-        raise HTTPException(status_code=500, detail="Nie można pobrać danych nagród")
-
+        raise HTTPException(status_code=500, detail="Nie można pobrać danych o ostatnim bloku")
+    
     data = response.json()
-    transactions = data.get("transactions", [])
+    return {
+        "time-since-last-round": data.get("time-since-last-round")
+    }
 
-    # Filtrowanie transakcji - nagrody od stałego adresu
+@app.get("/rewards/{address}")
+def get_rewards(address: str):
+    params = {
+        "tx-type": "pay",
+        "address-role": "receiver",
+        "limit": 1000
+    }
+    response = requests.get(f"{INDEXER_API}/accounts/{address}/transactions", params=params)
+    if response.status_code != 200:
+        raise HTTPException(status_code=500, detail="Nie można pobrać historii transakcji")
+    
+    data = response.json()
     rewards = []
-    for tx in transactions:
-        payment = tx.get("payment-transaction", {})
-        sender = tx.get("sender")
-        receiver = payment.get("receiver")
-        amount = payment.get("amount", 0)
-
-        if sender == REWARDS_SENDER and receiver == account:
-            timestamp = tx.get("round-time", 0)
-            if timestamp:
-                dt = datetime.utcfromtimestamp(timestamp).strftime('%d.%m.%Y, %H:%M:%S')
-                algo_amount = amount / 1_000_000  # Zamiana microAlgo -> ALGO
-                rewards.append({"date": dt, "amount": round(algo_amount, 6)})
-
-    # Sortuj malejąco po dacie
-    rewards.sort(key=lambda x: x["date"], reverse=True)
-
-    return {"rewards": rewards}
+    for tx in data.get("transactions", []):
+        if tx.get("sender") == REWARD_SENDER:
+            rewards.append({
+                "date": tx["round-time"],
+                "amount": tx["amount"]
+            })
+    return rewards

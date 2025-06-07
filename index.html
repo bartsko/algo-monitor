@@ -2,9 +2,7 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Monitorowanie Węzła Algorand</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
             background-color: #0f0f0f;
@@ -12,186 +10,94 @@
             font-family: monospace;
             text-align: center;
         }
-        .container {
-            max-width: 1200px;
-            margin: auto;
-            padding: 20px;
+        input, button {
+            font-family: monospace;
+            margin: 5px;
         }
-        .section {
-            margin-bottom: 30px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th, td {
-            border: 1px solid #5c4b99;
-            padding: 8px;
-        }
-        th {
-            background-color: #1a1a1a;
-            color: #5c4b99;
-        }
-        td {
-            color: #00ff00;
-        }
-        .status-active {
+        .online {
             color: limegreen;
         }
-        .status-inactive {
+        .offline {
             color: red;
         }
-        #rewardCalendar {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
+        table {
+            margin: auto;
+            border-collapse: collapse;
+            margin-top: 20px;
         }
-        .calendar-day {
-            background-color: #5c4b99;
-            margin: 5px;
-            padding: 10px;
-            border-radius: 5px;
-            width: 100px;
+        table, th, td {
+            border: 1px solid #5c4b99;
         }
-        input {
-            width: 400px;
-            padding: 10px;
-            font-size: 16px;
-            margin-bottom: 10px;
+        th, td {
+            padding: 8px;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Monitorowanie Węzła Algorand</h1>
 
-        <!-- Wprowadź adres -->
-        <div class="section">
-            <h2>Sprawdź inny adres</h2>
-            <input type="text" id="addressInput" placeholder="Wpisz adres Algorand">
-            <button onclick="updateAll()">Sprawdź</button>
-        </div>
+    <h2>Monitorowanie Węzła Algorand</h2>
+    <input type="text" id="addressInput" placeholder="Wpisz adres portfela" size="60">
+    <button onclick="checkStatus()">Sprawdź</button>
 
-        <!-- Status Węzła -->
-        <div class="section">
-            <h2>Status Węzła</h2>
-            <div id="node-status">Loading...</div>
-        </div>
+    <h3>Status Węzła</h3>
+    <div id="status" class="offline">Offline</div>
 
-        <!-- Średnia liczba transakcji na blok -->
-        <div class="section">
-            <h2>Średnia liczba transakcji na blok</h2>
-            <canvas id="transactionsChart" width="600" height="400"></canvas>
-        </div>
+    <h3>Średnia Liczba transakcji na blok</h3>
+    <div id="averageTx">...</div>
 
-        <!-- Tabela ostatnich transakcji -->
-        <div class="section">
-            <h2>Ostatnie 10 transakcji</h2>
-            <table id="recentTransactions">
-                <thead>
-                    <tr><th>Hash</th><th>Data</th></tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-        </div>
+    <h3>Czas od ostatniego bloku</h3>
+    <div id="blockTimer">...</div>
 
-        <!-- Licznik bloków -->
-        <div class="section">
-            <h2>Czas od ostatniego bloku</h2>
-            <div id="blockTimer">Loading...</div>
-        </div>
-
-        <!-- Kalendarz otrzymanych nagród -->
-        <div class="section">
-            <h2>Kalendarz otrzymanych nagród</h2>
-            <div id="rewardCalendar">Loading...</div>
-        </div>
-    </div>
+    <h3>Kalendarz otrzymanych nagród</h3>
+    <table>
+        <thead>
+            <tr><th>Data nagrody</th></tr>
+        </thead>
+        <tbody id="rewardCalendar"></tbody>
+    </table>
 
     <script>
         const API_BASE = "https://algo-monitor.onrender.com";
 
-        function getAddress() {
-            return document.getElementById("addressInput").value.trim();
-        }
+        async function checkStatus() {
+            const address = document.getElementById("addressInput").value;
 
-        function updateStatus() {
-            fetch(`${API_BASE}/node-status?address=${getAddress()}`)
-                .then(response => response.json())
-                .then(data => {
-                    const statusDiv = document.getElementById("node-status");
-                    statusDiv.innerText = data.status;
-                    statusDiv.className = data.status === "Online" ? "status-active" : "status-inactive";
-                });
-        }
-
-        function loadTransactionsChart() {
-            fetch(`${API_BASE}/average-transactions`)
-                .then(response => response.json())
-                .then(data => {
-                    const ctx = document.getElementById("transactionsChart").getContext("2d");
-                    new Chart(ctx, {
-                        type: "bar",
-                        data: {
-                            labels: data.rounds,
-                            datasets: [{
-                                label: "Transakcje na blok",
-                                data: data.transactions,
-                                backgroundColor: "#5c4b99"
-                            }]
-                        }
-                    });
-                });
-        }
-
-        function loadRecentTransactions() {
-            fetch(`${API_BASE}/recent-transactions?address=${getAddress()}`)
-                .then(response => response.json())
-                .then(data => {
-                    const tbody = document.getElementById("recentTransactions").querySelector("tbody");
-                    tbody.innerHTML = "";
-                    data.transactions.forEach(txn => {
-                        const row = `<tr><td>${txn.hash}</td><td>${new Date(txn.timestamp * 1000).toLocaleString()}</td></tr>`;
-                        tbody.innerHTML += row;
-                    });
-                });
-        }
-
-        function startBlockTimer() {
-            function updateTimer() {
-                fetch(`${API_BASE}/block-timer`)
-                    .then(response => response.json())
-                    .then(data => {
-                        document.getElementById("blockTimer").innerText = `${data.seconds} sekund od ostatniego bloku`;
-                    });
+            // Sprawdzenie statusu
+            const statusRes = await fetch(`${API_BASE}/node-status?address=${address}`);
+            const statusData = await statusRes.json();
+            const statusDiv = document.getElementById("status");
+            if (statusData.status === "Online") {
+                statusDiv.innerText = "Online";
+                statusDiv.className = "online";
+            } else {
+                statusDiv.innerText = "Offline";
+                statusDiv.className = "offline";
             }
-            setInterval(updateTimer, 1000);
-        }
 
-        function loadRewardCalendar() {
-            fetch(`${API_BASE}/reward-calendar?address=${getAddress()}`)
-                .then(response => response.json())
-                .then(data => {
-                    const calendarDiv = document.getElementById("rewardCalendar");
-                    calendarDiv.innerHTML = "";
-                    data.days.forEach(day => {
-                        const dayDiv = document.createElement("div");
-                        dayDiv.className = "calendar-day";
-                        dayDiv.textContent = day;
-                        calendarDiv.appendChild(dayDiv);
-                    });
-                });
-        }
+            // Średnia liczba transakcji na blok
+            const txRes = await fetch(`${API_BASE}/average-tx`);
+            const txData = await txRes.json();
+            document.getElementById("averageTx").innerText = `Średnia transakcji: ${txData.average_tx.toFixed(2)}`;
 
-        function updateAll() {
-            updateStatus();
-            loadRecentTransactions();
-            loadRewardCalendar();
-        }
+            // Czas od ostatniego bloku
+            const timerRes = await fetch(`${API_BASE}/block-timer`);
+            const timerData = await timerRes.json();
+            document.getElementById("blockTimer").innerText = `${(timerData.seconds / 1000000).toFixed(1)} sekund od ostatniego bloku`;
 
-        // Initial load
-        loadTransactionsChart();
-        startBlockTimer();
+            // Kalendarz nagród
+            const rewardsRes = await fetch(`${API_BASE}/reward-calendar?address=${address}`);
+            const rewardsData = await rewardsRes.json();
+            const calendar = document.getElementById("rewardCalendar");
+            calendar.innerHTML = "";
+            rewardsData.reward_dates.forEach(date => {
+                const row = document.createElement("tr");
+                const cell = document.createElement("td");
+                cell.innerText = date;
+                row.appendChild(cell);
+                calendar.appendChild(row);
+            });
+        }
     </script>
+
 </body>
 </html>

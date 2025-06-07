@@ -1,11 +1,12 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
+import time
 
 app = FastAPI()
 
-# Middleware CORS
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,77 +15,63 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# API Endpoints
-INDEXER_URL = "https://mainnet-idx.algonode.cloud/v2"
-ALGOD_URL = "https://mainnet-api.algonode.cloud/v2"
-
-REWARDS_SENDER = "Y76M3MSY6DKBRHBL7C3NNDXGS5IIMQVQVUAB6MP4XEMMGVF2QWNPL226CA"
+ALGOD_NODE = "https://mainnet-api.algonode.cloud"
+INDEXER_NODE = "https://mainnet-idx.algonode.cloud"
+REWARDS_ADDRESS = "Y76M3MSY6DKBRHBL7C3NNDXGS5IIMQVQVUAB6MP4XEMMGVF2QWNPL226CA"
 
 @app.get("/")
-def home():
+async def root():
     return {"message": "Algorand Node Monitor API is running"}
 
-@app.get("/account-info")
-def account_info(address: str):
-    # 1. Dane z Algod API
-    algod_response = requests.get(f"{ALGOD_URL}/accounts/{address}")
-    if algod_response.status_code != 200:
-        raise HTTPException(status_code=404, detail="Nie znaleziono konta w Algod API")
+@app.get("/account/{address}")
+async def get_account(address: str):
+    url = f"{ALGOD_NODE}/v2/accounts/{address}"
+    response = requests.get(url)
+    if response.status_code != 200:
+        raise HTTPException(status_code=404, detail="Account not found")
+    data = response.json()
 
-    algod_data = algod_response.json()["account"]
+    balance = data["amount"] / 1e6
+    pending_rewards = data.get("pending-rewards", 0) / 1e6
+    status = "Online" if data.get("status") == "Online" else "Offline"
 
-    balance = algod_data.get("amount", 0) / 1_000_000  # microAlgos -> Algos
-    pending_rewards = algod_data.get("pending-rewards", 0) / 1_000_000
+    # Last block
+    block_url = f"{ALGOD_NODE}/v2/status"
+    block_resp = requests.get(block_url)
+    block_data = block_resp.json()
 
-    registered_for_rewards = algod_data.get("participation", {}).get("vote-participation-key") is not None
-
-    # 2. Pobranie ostatniego bloku
-    status_response = requests.get(f"{ALGOD_URL}/status")
-    if status_response.status_code != 200:
-        raise HTTPException(status_code=500, detail="Nie można pobrać statusu sieci")
-
-    status_data = status_response.json()
-    last_block_time = status_data.get("time-since-last-round", 0)
+    last_round_time = block_data.get("time-since-last-round", 0)
 
     return {
         "balance": balance,
         "pending_rewards": pending_rewards,
-        "registered_for_rewards": registered_for_rewards,
-        "last_block_time": last_block_time
+        "status": status,
+        "last_block_time": last_round_time
     }
 
-@app.get("/reward-history")
-def reward_history(address: str):
+@app.get("/rewards/{address}")
+async def get_rewards(address: str):
+    url = f"{INDEXER_NODE}/v2/accounts/{address}/transactions?tx-type=pay&asset-id=0&limit=1000"
+    response = requests.get(url)
+    if response.status_code != 200:
+        raise HTTPException(status_code=404, detail="Transaction history not found")
+
+    txns = response.json().get('transactions', [])
     rewards = []
 
-    next_token = ""
-    while True:
-        params = {
-            "asset-id": 0,
-            "address": address,
-            "tx-type": "pay",
-            "limit": 1000,
-            "next": next_token
-        }
-        url = f"{INDEXER_URL}/accounts/{address}/transactions"
-        response = requests.get(url, params=params)
-        if response.status_code != 200:
-            raise HTTPException(status_code=500, detail="Nie można pobrać historii transakcji")
+    for tx in txns:
+        sender = tx.get("sender")
+        receiver = tx.get("payment-transaction", {}).get("receiver")
+        amount = tx.get("payment-transaction", {}).get("amount", 0)
 
-        data = response.json()
-        transactions = data.get("transactions", [])
+        if sender == REWARDS_ADDRESS and receiver == address:
+            timestamp = tx.get("round-time", 0)
+            date = datetime.utcfromtimestamp(timestamp).strftime("%d.%m.%Y, %H:%M:%S")
+            rewards.append({
+                "date": date,
+                "amount": amount / 1e6
+            })
 
-        for tx in transactions:
-            sender = tx.get("sender", "")
-            if sender == REWARDS_SENDER:
-                timestamp = tx.get("round-time")
-                amount = tx.get("payment-transaction", {}).get("amount", 0) / 1_000_000  # ALGO
-                date = datetime.utcfromtimestamp(timestamp).strftime("%d.%m.%Y %H:%M:%S")
-                rewards.append({"date": date, "amount": amount})
-
-        # Break if no more pages
-        if "next-token" not in data:
-            break
-        next_token = data["next-token"]
-
-    return {"rewards": rewards}
+    # Sortujemy od najnowszych
+    rewards = sorted(rewards, key=lambda x: x["date"], reverse=True)
+    return rewards

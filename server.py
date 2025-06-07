@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 import requests
 from datetime import datetime
@@ -14,12 +14,11 @@ app.add_middleware(
 )
 
 ALGONODE_API = "https://mainnet-api.algonode.cloud/v2"
-MONITORED_ADDRESS = "TWÓJ_ADRES"  # <<< Twój adres Algorand!
 REWARD_SENDER = "Y76M3MSY6DKBRHBL7C3NNDXGS5IIMQVQVUAB6MP4XEMMGVF2QWNPL226CA"
 
 @app.get("/node-status")
-def node_status():
-    response = requests.get(f"{ALGONODE_API}/accounts/{MONITORED_ADDRESS}")
+def node_status(address: str = Query(...)):
+    response = requests.get(f"{ALGONODE_API}/accounts/{address}")
     data = response.json()
     status = data.get("status", "Offline")
     return {"status": status}
@@ -35,8 +34,8 @@ def average_transactions():
     return {"rounds": rounds, "transactions": transactions}
 
 @app.get("/recent-transactions")
-def recent_transactions():
-    response = requests.get(f"{ALGONODE_API}/accounts/{MONITORED_ADDRESS}/transactions?limit=10")
+def recent_transactions(address: str = Query(...)):
+    response = requests.get(f"{ALGONODE_API}/accounts/{address}/transactions?limit=10")
     txns = response.json().get("transactions", [])
     formatted = [{"hash": txn["id"], "timestamp": txn["round-time"]} for txn in txns]
     return {"transactions": formatted}
@@ -47,8 +46,8 @@ def block_timer():
     return {"seconds": status["time-since-last-round"]}
 
 @app.get("/reward-calendar")
-def reward_calendar():
-    response = requests.get(f"{ALGONODE_API}/accounts/{MONITORED_ADDRESS}/transactions?limit=1000")
+def reward_calendar(address: str = Query(...)):
+    response = requests.get(f"{ALGONODE_API}/accounts/{address}/transactions?limit=1000")
     txns = response.json().get("transactions", [])
     reward_days = set()
 

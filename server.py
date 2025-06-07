@@ -35,26 +35,10 @@ async def get_account(address: str):
     pending_rewards = data.get("pending-rewards", 0) / 1e6
     status = "Online" if data.get("status") == "Online" else "Offline"
 
-    # Last block + timestamp
-    block_url = f"{ALGOD_NODE}/v2/status"
-    block_resp = requests.get(block_url)
-    block_data = block_resp.json()
-
-    last_round = block_data.get("last-round")
-    block_detail_url = f"{ALGOD_NODE}/v2/blocks/{last_round}"
-    block_detail_resp = requests.get(block_detail_url)
-    block_detail = block_detail_resp.json()
-
-    last_block_time_unix = block_detail.get("timestamp", 0)
-
-    current_time_unix = int(datetime.utcnow().timestamp())
-    time_since_last_block = current_time_unix - last_block_time_unix
-
     return {
         "balance": balance,
         "pending_rewards": pending_rewards,
-        "status": status,
-        "last_block_time": time_since_last_block
+        "status": status
     }
 
 @app.get("/rewards/{address}")

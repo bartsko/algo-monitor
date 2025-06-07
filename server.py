@@ -5,6 +5,7 @@ from datetime import datetime
 
 app = FastAPI()
 
+# Middleware CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -13,49 +14,57 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Stałe
 ALGONODE_API = "https://mainnet-api.algonode.cloud/v2"
 REWARD_SENDER = "Y76M3MSY6DKBRHBL7C3NNDXGS5IIMQVQVUAB6MP4XEMMGVF2QWNPL226CA"
 
+@app.get("/")
+def home():
+    return {"message": "Algorand Node Monitor API is running"}
+
+# Sprawdzenie udziału w konsensusie
 @app.get("/node-status")
 def node_status(address: str = Query(...)):
     response = requests.get(f"{ALGONODE_API}/accounts/{address}")
     data = response.json()
-    status = data.get("status", "Offline")
+    participation = data.get("account", {}).get("participation", {})
+    status = "Online" if "selection-participation-key" in participation else "Offline"
     return {"status": status}
 
-@app.get("/average-transactions")
-def average_transactions():
-    latest = requests.get(f"{ALGONODE_API}/status").json()["last-round"]
-    rounds = list(range(latest - 9, latest + 1))
-    transactions = []
-    for rnd in rounds:
-        blk = requests.get(f"{ALGONODE_API}/blocks/{rnd}").json()
-        transactions.append(len(blk.get("txns", [])))
-    return {"rounds": rounds, "transactions": transactions}
+# Średnia liczba transakcji na blok
+@app.get("/average-tx")
+def average_tx():
+    response = requests.get(f"{ALGONODE_API}/blocks?limit=10")
+    data = response.json()
 
-@app.get("/recent-transactions")
-def recent_transactions(address: str = Query(...)):
-    response = requests.get(f"{ALGONODE_API}/accounts/{address}/transactions?limit=10")
-    txns = response.json().get("transactions", [])
-    formatted = [{"hash": txn["id"], "timestamp": txn["round-time"]} for txn in txns]
-    return {"transactions": formatted}
+    blocks = data.get("blocks", [])
+    if not blocks:
+        return {"average_tx": 0}
 
+    total_tx = sum(block.get("txns", 0) for block in blocks)
+    avg_tx = total_tx / len(blocks)
+    return {"average_tx": avg_tx}
+
+# Czas od ostatniego bloku
 @app.get("/block-timer")
 def block_timer():
-    status = requests.get(f"{ALGONODE_API}/status").json()
-    return {"seconds": status["time-since-last-round"]}
+    response = requests.get(f"{ALGONODE_API}/status")
+    data = response.json()
 
+    time_micro = data.get("time-since-last-round", 0)  # Mikrosekundy
+    return {"seconds": time_micro}
+
+# Kalendarz nagród
 @app.get("/reward-calendar")
 def reward_calendar(address: str = Query(...)):
-    response = requests.get(f"{ALGONODE_API}/accounts/{address}/transactions?limit=1000")
-    txns = response.json().get("transactions", [])
-    reward_days = set()
+    response = requests.get(f"{ALGONODE_API}/accounts/{address}/transactions?limit=10000")
+    data = response.json()
 
-    for txn in txns:
-        if txn.get("sender") == REWARD_SENDER:
-            timestamp = txn.get("round-time")
-            if timestamp:
-                day = datetime.utcfromtimestamp(timestamp).strftime("%Y-%m-%d")
-                reward_days.add(day)
-
-    return {"days": sorted(reward_days)}
+    transactions = data.get("transactions", [])
+    reward_dates = []
+    for tx in transactions:
+        if tx.get("sender") == REWARD_SENDER:
+            timestamp = tx.get("round-time", 0)
+            date = datetime.utcfromtimestamp(timestamp).strftime("%Y-%m-%d")
+            reward_dates.append(date)
+    return {"reward_dates": reward_dates}

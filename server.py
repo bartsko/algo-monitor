@@ -1,10 +1,11 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import requests
+import time
 
 app = FastAPI()
 
-# Pozwalamy na połączenia z dowolnej domeny (ważne dla frontendów na Vercel)
+# Dodanie CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -13,57 +14,56 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# API Algorand - Algonode
-ALGOD_API = "https://mainnet-api.algonode.cloud/v2"
-INDEXER_API = "https://mainnet-idx.algonode.cloud/v2"
+# API do Algorand Node
+NODE_API_URL = "https://mainnet-api.algonode.cloud/v2/accounts"
+STATUS_API_URL = "https://mainnet-api.algonode.cloud/v2/status"
+
+# Algorand Indexer API (do transakcji)
+INDEXER_API_URL = "https://mainnet-idx.algonode.cloud/v2"
 REWARD_SENDER = "Y76M3MSY6DKBRHBL7C3NNDXGS5IIMQVQVUAB6MP4XEMMGVF2QWNPL226CA"
 
 @app.get("/")
-def root():
+def home():
     return {"message": "Algorand Node Monitor API is running"}
 
-@app.get("/node-status/{address}")
-def get_node_status(address: str):
-    response = requests.get(f"{ALGOD_API}/accounts/{address}")
+@app.get("/node-account")
+def get_node_account(account: str):
+    response = requests.get(f"{NODE_API_URL}/{account}")
     if response.status_code != 200:
-        raise HTTPException(status_code=404, detail="Nie znaleziono konta")
-    
+        return {"error": "Nie znaleziono konta lub błędna odpowiedź API"}
+
     data = response.json()
-    return {
+
+    account_info = {
         "address": data["address"],
-        "amount": data["amount"],
-        "status": data.get("status", "Offline"),
-        "pending-rewards": data.get("pending-rewards", 0)
+        "amount": data["amount"] / 1_000_000,  # Zmienione z microAlgo na Algo
+        "pending-rewards": data.get("pending-rewards", 0) / 1_000_000,
+        "registered-for-rewards": data.get("registered-for-rewards", False)
     }
+    return {"account": account_info}
 
 @app.get("/last-round")
-def get_last_round_time():
-    response = requests.get(f"{ALGOD_API}/status")
+def get_last_round():
+    response = requests.get(STATUS_API_URL)
     if response.status_code != 200:
-        raise HTTPException(status_code=500, detail="Nie można pobrać danych o ostatnim bloku")
-    
+        return {"error": "Nie można pobrać danych o bloku"}
+
     data = response.json()
-    return {
-        "time-since-last-round": data.get("time-since-last-round")
-    }
+    return {"last_round": data["last-round"], "time": int(time.time())}
 
 @app.get("/rewards/{address}")
 def get_rewards(address: str):
-    params = {
-        "tx-type": "pay",
-        "address-role": "receiver",
-        "limit": 1000
-    }
-    response = requests.get(f"{INDEXER_API}/accounts/{address}/transactions", params=params)
+    response = requests.get(f"{INDEXER_API_URL}/accounts/{address}/transactions?limit=1000")
     if response.status_code != 200:
-        raise HTTPException(status_code=500, detail="Nie można pobrać historii transakcji")
-    
-    data = response.json()
+        return {"error": "Nie można pobrać danych o transakcjach"}
+
+    transactions = response.json().get("transactions", [])
     rewards = []
-    for tx in data.get("transactions", []):
-        if tx.get("sender") == REWARD_SENDER:
+    for txn in transactions:
+        if txn.get("sender") == REWARD_SENDER and txn.get("payment-transaction", {}).get("receiver") == address:
             rewards.append({
-                "date": tx["round-time"],
-                "amount": tx["amount"]
+                "timestamp": txn.get("round-time"),
+                "amount": txn.get("payment-transaction", {}).get("amount", 0) / 1_000_000  # MicroAlgo -> Algo
             })
-    return rewards
+
+    return {"rewards": rewards}

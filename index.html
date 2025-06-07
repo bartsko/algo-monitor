@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Monitorowanie Węzła Algorand</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
             background-color: #0f0f0f;
@@ -12,59 +13,20 @@
             text-align: center;
         }
         .container {
-            max-width: 800px;
+            max-width: 1200px;
             margin: auto;
             padding: 20px;
-            border: 2px solid #5c4b99;
-            border-radius: 10px;
-            background-color: #111;
-            box-shadow: 0px 0px 20px #5c4b99;
         }
-        .input-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-        input, button {
-            font-size: 16px;
-            font-family: monospace;
-            padding: 8px;
-            border-radius: 5px;
-            border: none;
-        }
-        input {
-            width: 100%;
-            background-color: #1a1a1a;
-            color: #00ff00;
-            text-align: center;
-        }
-        button {
-            background-color: #98c379;
-            color: #000;
-            cursor: pointer;
-            margin-top: 5px;
-        }
-        .info-bar {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px;
-            background-color: #222;
-            border-radius: 5px;
-            margin-bottom: 10px;
-        }
-        .info-bar span {
-            font-weight: bold;
+        .section {
+            margin-bottom: 30px;
         }
         table {
             width: 100%;
             border-collapse: collapse;
-            background-color: #111;
         }
         th, td {
             border: 1px solid #5c4b99;
             padding: 8px;
-            text-align: left;
         }
         th {
             background-color: #1a1a1a;
@@ -79,90 +41,136 @@
         .status-inactive {
             color: red;
         }
+        #rewardCalendar {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .calendar-day {
+            background-color: #5c4b99;
+            margin: 5px;
+            padding: 10px;
+            border-radius: 5px;
+            width: 100px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Monitorowanie Węzła Algorand</h1>
-        <div class="input-container">
-            <input type="text" id="account" placeholder="Wpisz adres portfela Algorand">
-            <button onclick="fetchData()">Sprawdź</button>
+
+        <!-- Status Węzła -->
+        <div class="section">
+            <h2>Status Węzła</h2>
+            <div id="node-status">Loading...</div>
         </div>
-        <div class="info-bar">
-            <span>Ostatni Blok: <span id="last-block">Loading...</span></span>
-            <span>Status: <span id="node-status" class="status-inactive">Loading...</span></span>
+
+        <!-- Średnia liczba transakcji na blok -->
+        <div class="section">
+            <h2>Średnia liczba transakcji na blok</h2>
+            <canvas id="transactionsChart" width="600" height="400"></canvas>
         </div>
-        <table>
-            <thead>
-                <tr>
-                    <th>Właściwość</th>
-                    <th>Wartość</th>
-                </tr>
-            </thead>
-            <tbody id="output">
-                <!-- Dane pojawią się tutaj -->
-            </tbody>
-        </table>
+
+        <!-- Tabela ostatnich transakcji -->
+        <div class="section">
+            <h2>Ostatnie 10 transakcji</h2>
+            <table id="recentTransactions">
+                <thead>
+                    <tr><th>Hash</th><th>Data</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <!-- Licznik bloków -->
+        <div class="section">
+            <h2>Czas od ostatniego bloku</h2>
+            <div id="blockTimer">Loading...</div>
+        </div>
+
+        <!-- Kalendarz otrzymanych nagród -->
+        <div class="section">
+            <h2>Kalendarz otrzymanych nagród</h2>
+            <div id="rewardCalendar">Loading...</div>
+        </div>
     </div>
 
     <script>
-        const API_BASE = "https://algo-monitor.onrender.com"; // Podstaw swój adres Render!
-        
-        function fetchData() {
-            let account = document.getElementById("account").value;
-            fetch(`${API_BASE}/node-account?account=${account}`)
+        const API_BASE = "https://algo-monitor.onrender.com"; // <- Twój działający backend
+
+        function updateStatus() {
+            fetch(`${API_BASE}/node-status`)
                 .then(response => response.json())
                 .then(data => {
-                    let output = document.getElementById("output");
-                    output.innerHTML = "";
+                    const statusDiv = document.getElementById("node-status");
+                    statusDiv.innerText = data.status;
+                    statusDiv.className = data.status === "Online" ? "status-active" : "status-inactive";
+                });
+        }
 
-                    if (data.error) {
-                        output.innerHTML = `<tr><td colspan="2" style="color: red; font-weight: bold;">${data.error}</td></tr>`;
-                        return;
-                    }
-
-                    let accountInfo = data.account;
-                    let properties = [
-                        { name: "Adres", value: accountInfo.address },
-                        { name: "Saldo (microAlgos)", value: accountInfo.amount },
-                        { name: "Status", value: accountInfo.status },
-                        { name: "Uczestniczy w konsensusie", value: accountInfo["vote-participation"] }
-                    ];
-
-                    properties.forEach(prop => {
-                        let row = `<tr><td>${prop.name}</td><td>${prop.value}</td></tr>`;
-                        output.innerHTML += row;
+        function loadTransactionsChart() {
+            fetch(`${API_BASE}/average-transactions`)
+                .then(response => response.json())
+                .then(data => {
+                    const ctx = document.getElementById("transactionsChart").getContext("2d");
+                    new Chart(ctx, {
+                        type: "bar",
+                        data: {
+                            labels: data.rounds,
+                            datasets: [{
+                                label: "Transakcje na blok",
+                                data: data.transactions,
+                                backgroundColor: "#5c4b99"
+                            }]
+                        }
                     });
-
-                    // Aktualizacja statusu sieci
-                    let statusElement = document.getElementById("node-status");
-                    if (accountInfo.status === "Online") {
-                        statusElement.innerText = "RUNNING";
-                        statusElement.classList.remove("status-inactive");
-                        statusElement.classList.add("status-active");
-                    } else {
-                        statusElement.innerText = "INACTIVE";
-                        statusElement.classList.remove("status-active");
-                        statusElement.classList.add("status-inactive");
-                    }
-                })
-                .catch(error => {
-                    document.getElementById("output").innerHTML = `<tr><td colspan="2" style="color: red; font-weight: bold;">Błąd: ${error}</td></tr>`;
                 });
         }
 
-        function updateLastBlock() {
-            fetch(`${API_BASE}/last-round`)
+        function loadRecentTransactions() {
+            fetch(`${API_BASE}/recent-transactions`)
                 .then(response => response.json())
                 .then(data => {
-                    document.getElementById("last-block").innerText = data.last_round;
-                })
-                .catch(() => {
-                    document.getElementById("last-block").innerText = "Błąd pobierania";
+                    const tbody = document.getElementById("recentTransactions").querySelector("tbody");
+                    tbody.innerHTML = "";
+                    data.transactions.forEach(txn => {
+                        const row = `<tr><td>${txn.hash}</td><td>${new Date(txn.timestamp * 1000).toLocaleString()}</td></tr>`;
+                        tbody.innerHTML += row;
+                    });
                 });
         }
 
-        setInterval(updateLastBlock, 5000);
+        function startBlockTimer() {
+            function updateTimer() {
+                fetch(`${API_BASE}/block-timer`)
+                    .then(response => response.json())
+                    .then(data => {
+                        document.getElementById("blockTimer").innerText = `${data.seconds} sekund od ostatniego bloku`;
+                    });
+            }
+            setInterval(updateTimer, 1000);
+        }
+
+        function loadRewardCalendar() {
+            fetch(`${API_BASE}/reward-calendar`)
+                .then(response => response.json())
+                .then(data => {
+                    const calendarDiv = document.getElementById("rewardCalendar");
+                    calendarDiv.innerHTML = "";
+                    data.days.forEach(day => {
+                        const dayDiv = document.createElement("div");
+                        dayDiv.className = "calendar-day";
+                        dayDiv.textContent = day;
+                        calendarDiv.appendChild(dayDiv);
+                    });
+                });
+        }
+
+        updateStatus();
+        loadTransactionsChart();
+        loadRecentTransactions();
+        startBlockTimer();
+        loadRewardCalendar();
     </script>
 </body>
 </html>

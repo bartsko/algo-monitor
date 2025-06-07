@@ -13,117 +13,121 @@
         }
         input, button {
             font-size: 16px;
-            padding: 10px;
+            padding: 8px;
             border-radius: 5px;
-            border: none;
             margin: 5px;
-        }
-        input {
-            width: 300px;
-            text-align: center;
         }
         button {
             background-color: #98c379;
-            color: black;
+            color: #000;
             cursor: pointer;
         }
-        .status-online {
-            color: lime;
+        .online {
+            color: limegreen;
         }
-        .status-offline {
+        .offline {
             color: red;
         }
-        .table-container {
-            margin-top: 20px;
-        }
         table {
-            width: 80%;
-            margin: 0 auto;
+            margin: 20px auto;
             border-collapse: collapse;
             background-color: #111;
-            box-shadow: 0 0 15px #5c4b99;
         }
         th, td {
             border: 1px solid #5c4b99;
-            padding: 10px;
-            text-align: center;
+            padding: 8px 12px;
         }
-        th {
-            background-color: #1a1a1a;
-            color: #d0a8ff;
+        .calendar {
+            margin-top: 20px;
         }
-        td {
-            color: #00ff00;
+        .reward-entry {
+            margin: 5px 0;
         }
     </style>
 </head>
 <body>
     <h1>Monitorowanie Węzła Algorand</h1>
 
-    <input type="text" id="account" placeholder="Wpisz adres portfela Algorand">
-    <button onclick="checkNode()">Sprawdź</button>
+    <div>
+        <input type="text" id="account" placeholder="Wpisz adres portfela Algorand">
+        <button onclick="fetchAccountData()">Sprawdź</button>
+    </div>
 
     <div id="status"></div>
-    <div id="account-info"></div>
+    <div id="balance"></div>
+    <div id="rewards"></div>
+    <div id="last-block-time"></div>
 
-    <h2>Kalendarz Otrzymanych Nagród</h2>
-    <div class="table-container">
-        <table>
-            <thead>
-                <tr>
-                    <th>Data</th>
-                    <th>Nagroda (ALGO)</th>
-                </tr>
-            </thead>
-            <tbody id="rewards-table">
-                <tr><td colspan="2">Brak danych</td></tr>
-            </tbody>
-        </table>
+    <div class="calendar">
+        <h2>Kalendarz otrzymanych nagród</h2>
+        <div id="reward-calendar"></div>
     </div>
 
     <script>
-        const API_URL = "https://twoj-backend.onrender.com"; // <-- zmień na swój backend np. https://algo-monitor.onrender.com
+        const API_BASE = "https://mainnet-api.algonode.cloud/v2";
+        const INDEXER_BASE = "https://mainnet-idx.algonode.cloud/v2";
+        const REWARD_SENDER = "Y76M3MSY6DKBRHBL7C3NNDXGS5IIMQVQVUAB6MP4XEMMGVF2QWNPL226CA";
 
-        async function checkNode() {
-            const account = document.getElementById('account').value;
-            if (!account) return alert("Wpisz adres!");
+        async function fetchAccountData() {
+            const account = document.getElementById("account").value;
 
             try {
-                // Pobieranie statusu węzła
-                const nodeRes = await fetch(`${API_URL}/node-info?account=${account}`);
-                const nodeData = await nodeRes.json();
+                const response = await fetch(`${API_BASE}/accounts/${account}`);
+                const data = await response.json();
 
-                const statusDiv = document.getElementById('status');
-                if (nodeData.status === "Online") {
-                    statusDiv.innerHTML = `<p class="status-online">Status: Online</p>`;
-                } else {
-                    statusDiv.innerHTML = `<p class="status-offline">Status: Offline</p>`;
+                if (data.status) {
+                    document.getElementById("status").innerHTML = `Status węzła: <span class="${data.status === 'Online' ? 'online' : 'offline'}">${data.status}</span>`;
+                }
+                document.getElementById("balance").innerText = `Saldo: ${(data.amount / 1e6).toFixed(6)} ALGO`;
+                document.getElementById("rewards").innerText = `Pending rewards: ${(data["pending-rewards"] / 1e6).toFixed(6)} ALGO`;
+
+                fetchLastBlockTime();
+                fetchRewardsCalendar(account);
+            } catch (error) {
+                console.error("Błąd pobierania danych konta:", error);
+            }
+        }
+
+        async function fetchLastBlockTime() {
+            try {
+                const response = await fetch(`${API_BASE}/status`);
+                const data = await response.json();
+
+                const timeSinceLastBlock = data["time-since-last-round"];
+                const timeInSeconds = (timeSinceLastBlock / 1000).toFixed(1);
+
+                document.getElementById("last-block-time").innerText = `Czas od ostatniego bloku: ${timeInSeconds} sekund`;
+            } catch (error) {
+                console.error("Błąd pobierania czasu ostatniego bloku:", error);
+            }
+        }
+
+        async function fetchRewardsCalendar(account) {
+            try {
+                const response = await fetch(`${INDEXER_BASE}/accounts/${account}/transactions?tx-type=pay&address-role=receiver&limit=1000`);
+                const data = await response.json();
+
+                const rewards = data.transactions.filter(tx => tx.sender === REWARD_SENDER);
+
+                const calendarDiv = document.getElementById("reward-calendar");
+                calendarDiv.innerHTML = '';
+
+                if (rewards.length === 0) {
+                    calendarDiv.innerHTML = "Brak otrzymanych nagród.";
+                    return;
                 }
 
-                document.getElementById('account-info').innerHTML = `
-                    <p>Saldo: ${nodeData.amount.toFixed(6)} ALGO</p>
-                    <p>Pending rewards: ${nodeData.pending_rewards.toFixed(6)} ALGO</p>
-                `;
-
-                // Pobieranie nagród
-                const rewardsRes = await fetch(`${API_URL}/rewards-calendar?account=${account}`);
-                const rewardsData = await rewardsRes.json();
-
-                const rewardsTable = document.getElementById('rewards-table');
-                rewardsTable.innerHTML = ""; // czyszczenie starego
-
-                if (rewardsData.rewards.length === 0) {
-                    rewardsTable.innerHTML = `<tr><td colspan="2">Brak nagród</td></tr>`;
-                } else {
-                    rewardsData.rewards.forEach(item => {
-                        const row = `<tr><td>${item.date}</td><td>${item.amount.toFixed(6)}</td></tr>`;
-                        rewardsTable.innerHTML += row;
-                    });
-                }
+                rewards.forEach(tx => {
+                    const date = new Date(tx["round-time"] * 1000);
+                    const amount = (tx.amount / 1e6).toFixed(6);
+                    const div = document.createElement("div");
+                    div.className = "reward-entry";
+                    div.innerText = `Data: ${date.toLocaleDateString()} ${date.toLocaleTimeString()} - Nagroda: ${amount} ALGO`;
+                    calendarDiv.appendChild(div);
+                });
 
             } catch (error) {
-                console.error("Błąd:", error);
-                alert("Wystąpił błąd podczas pobierania danych.");
+                console.error("Błąd pobierania kalendarza nagród:", error);
             }
         }
     </script>

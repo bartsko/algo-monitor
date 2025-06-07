@@ -5,7 +5,7 @@ from datetime import datetime
 
 app = FastAPI()
 
-# CORS — pozwalamy na dostęp z frontendu
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,7 +16,7 @@ app.add_middleware(
 
 ALGOD_API_URL = "https://mainnet-api.algonode.cloud/v2"
 INDEXER_API_URL = "https://mainnet-idx.algonode.cloud/v2"
-REWARDS_SENDER = "Y76M3MSY6DKBRHBL7C3NNDXGS5IIMQVQVUAB6MP4XEMMGVF2QWNPL226CA"  # Stały adres nagród
+REWARDS_SENDER = "Y76M3MSY6DKBRHBL7C3NNDXGS5IIMQVQVUAB6MP4XEMMGVF2QWNPL226CA"
 
 @app.get("/")
 def root():
@@ -43,8 +43,7 @@ def get_rewards_calendar(account: str):
     url = (
         f"{INDEXER_API_URL}/accounts/{account}/transactions"
         f"?tx-type=pay"
-        f"&sender={REWARDS_SENDER}"
-        f"&limit=50"
+        f"&limit=1000"   # Pobieramy więcej transakcji, nie tylko ostatnie 50
     )
     response = requests.get(url)
 
@@ -54,13 +53,20 @@ def get_rewards_calendar(account: str):
     data = response.json()
     transactions = data.get("transactions", [])
 
+    # Filtrowanie transakcji - nagrody od stałego adresu
     rewards = []
     for tx in transactions:
-        amount = tx.get("payment-transaction", {}).get("amount", 0) / 1_000_000
-        timestamp = tx.get("round-time", 0)
-        if timestamp:
-            dt = datetime.utcfromtimestamp(timestamp).strftime('%d.%m.%Y, %H:%M:%S')
-            rewards.append({"date": dt, "amount": amount})
+        payment = tx.get("payment-transaction", {})
+        sender = tx.get("sender")
+        receiver = payment.get("receiver")
+        amount = payment.get("amount", 0)
+
+        if sender == REWARDS_SENDER and receiver == account:
+            timestamp = tx.get("round-time", 0)
+            if timestamp:
+                dt = datetime.utcfromtimestamp(timestamp).strftime('%d.%m.%Y, %H:%M:%S')
+                algo_amount = amount / 1_000_000  # Zamiana microAlgo -> ALGO
+                rewards.append({"date": dt, "amount": round(algo_amount, 6)})
 
     # Sortuj malejąco po dacie
     rewards.sort(key=lambda x: x["date"], reverse=True)

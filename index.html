@@ -1,167 +1,131 @@
 <!DOCTYPE html>
 <html lang="pl">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Monitorowanie Węzła Algorand</title>
-  <style>
-    body {
-      background-color: #0f0f0f;
-      font-family: monospace;
-      text-align: center;
-      color: #d0a8ff;
-    }
-    h1 {
-      margin-top: 20px;
-    }
-    input {
-      margin: 10px;
-      padding: 8px;
-      font-size: 16px;
-      border-radius: 5px;
-      border: none;
-      text-align: center;
-      width: 300px;
-      background-color: #222;
-      color: #00ff00;
-    }
-    button {
-      padding: 10px 20px;
-      font-size: 16px;
-      margin: 10px;
-      background-color: #98c379;
-      color: #000;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-    }
-    table {
-      width: 80%;
-      margin: 20px auto;
-      border-collapse: collapse;
-      box-shadow: 0px 0px 15px #5c4b99;
-    }
-    th, td {
-      border: 1px solid #5c4b99;
-      padding: 10px;
-    }
-    th {
-      background-color: #111;
-      color: #d0a8ff;
-    }
-    td {
-      background-color: #111;
-      color: #00ff00;
-    }
-    .status-online {
-      color: lime;
-      font-weight: bold;
-    }
-    .status-offline {
-      color: red;
-      font-weight: bold;
-    }
-    .error {
-      color: red;
-      margin-top: 10px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitorowanie Węzła Algorand</title>
+    <style>
+        body {
+            background-color: #0f0f0f;
+            color: #d0a8ff;
+            font-family: monospace;
+            text-align: center;
+        }
+        input, button {
+            font-size: 16px;
+            padding: 10px;
+            border-radius: 5px;
+            border: none;
+            margin: 5px;
+        }
+        input {
+            width: 300px;
+            text-align: center;
+        }
+        button {
+            background-color: #98c379;
+            color: black;
+            cursor: pointer;
+        }
+        .status-online {
+            color: lime;
+        }
+        .status-offline {
+            color: red;
+        }
+        .table-container {
+            margin-top: 20px;
+        }
+        table {
+            width: 80%;
+            margin: 0 auto;
+            border-collapse: collapse;
+            background-color: #111;
+            box-shadow: 0 0 15px #5c4b99;
+        }
+        th, td {
+            border: 1px solid #5c4b99;
+            padding: 10px;
+            text-align: center;
+        }
+        th {
+            background-color: #1a1a1a;
+            color: #d0a8ff;
+        }
+        td {
+            color: #00ff00;
+        }
+    </style>
 </head>
 <body>
-  <h1>Monitorowanie Węzła Algorand</h1>
-  <input type="text" id="address" placeholder="Wklej adres portfela" />
-  <button onclick="checkStatus()">Sprawdź</button>
+    <h1>Monitorowanie Węzła Algorand</h1>
 
-  <div id="status-info">
-    <h2>Status węzła: <span id="status"></span></h2>
-    <div>Saldo: <span id="balance"></span> ALGO</div>
-    <div>Pending rewards: <span id="pending"></span> ALGO</div>
-  </div>
+    <input type="text" id="account" placeholder="Wpisz adres portfela Algorand">
+    <button onclick="checkNode()">Sprawdź</button>
 
-  <h2>Kalendarz Otrzymanych Nagród</h2>
-  <table id="rewards-table">
-    <thead>
-      <tr>
-        <th>Data</th>
-        <th>Nagroda (ALGO)</th>
-      </tr>
-    </thead>
-    <tbody id="rewards-body">
-    </tbody>
-  </table>
+    <div id="status"></div>
+    <div id="account-info"></div>
 
-  <div id="error" class="error"></div>
+    <h2>Kalendarz Otrzymanych Nagród</h2>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Nagroda (ALGO)</th>
+                </tr>
+            </thead>
+            <tbody id="rewards-table">
+                <tr><td colspan="2">Brak danych</td></tr>
+            </tbody>
+        </table>
+    </div>
 
-  <script>
-    const API_URL = "https://algo-monitor.onrender.com"; // <-- Backend URL
+    <script>
+        const API_URL = "https://twoj-backend.onrender.com"; // <-- zmień na swój backend np. https://algo-monitor.onrender.com
 
-    async function checkStatus() {
-      const address = document.getElementById("address").value.trim();
-      document.getElementById("error").innerText = "";
+        async function checkNode() {
+            const account = document.getElementById('account').value;
+            if (!account) return alert("Wpisz adres!");
 
-      if (!address) {
-        document.getElementById("error").innerText = "Podaj adres!";
-        return;
-      }
+            try {
+                // Pobieranie statusu węzła
+                const nodeRes = await fetch(`${API_URL}/node-info?account=${account}`);
+                const nodeData = await nodeRes.json();
 
-      try {
-        const res = await fetch(`${API_URL}/account-info?address=${address}`);
-        if (!res.ok) throw new Error("Błąd pobierania danych");
+                const statusDiv = document.getElementById('status');
+                if (nodeData.status === "Online") {
+                    statusDiv.innerHTML = `<p class="status-online">Status: Online</p>`;
+                } else {
+                    statusDiv.innerHTML = `<p class="status-offline">Status: Offline</p>`;
+                }
 
-        const data = await res.json();
+                document.getElementById('account-info').innerHTML = `
+                    <p>Saldo: ${nodeData.amount.toFixed(6)} ALGO</p>
+                    <p>Pending rewards: ${nodeData.pending_rewards.toFixed(6)} ALGO</p>
+                `;
 
-        // Status
-        const statusEl = document.getElementById("status");
-        if (data.participating === "Tak") {
-          statusEl.innerText = "Online";
-          statusEl.className = "status-online";
-        } else {
-          statusEl.innerText = "Offline";
-          statusEl.className = "status-offline";
+                // Pobieranie nagród
+                const rewardsRes = await fetch(`${API_URL}/rewards-calendar?account=${account}`);
+                const rewardsData = await rewardsRes.json();
+
+                const rewardsTable = document.getElementById('rewards-table');
+                rewardsTable.innerHTML = ""; // czyszczenie starego
+
+                if (rewardsData.rewards.length === 0) {
+                    rewardsTable.innerHTML = `<tr><td colspan="2">Brak nagród</td></tr>`;
+                } else {
+                    rewardsData.rewards.forEach(item => {
+                        const row = `<tr><td>${item.date}</td><td>${item.amount.toFixed(6)}</td></tr>`;
+                        rewardsTable.innerHTML += row;
+                    });
+                }
+
+            } catch (error) {
+                console.error("Błąd:", error);
+                alert("Wystąpił błąd podczas pobierania danych.");
+            }
         }
-
-        // Balance
-        document.getElementById("balance").innerText = data.balance.toFixed(6);
-
-        // Pending rewards
-        document.getElementById("pending").innerText = data.pending_rewards.toFixed(6);
-
-        // Rewards calendar
-        loadRewards(address);
-
-      } catch (err) {
-        document.getElementById("error").innerText = "Błąd: " + err.message;
-      }
-    }
-
-    async function loadRewards(address) {
-      try {
-        const res = await fetch(`${API_URL}/reward-history?address=${address}`);
-        if (!res.ok) throw new Error("Błąd pobierania nagród");
-
-        const data = await res.json();
-        const rewardsBody = document.getElementById("rewards-body");
-        rewardsBody.innerHTML = "";
-
-        if (data.rewards.length === 0) {
-          rewardsBody.innerHTML = `<tr><td colspan="2">Brak nagród</td></tr>`;
-          return;
-        }
-
-        data.rewards.forEach(reward => {
-          const date = new Date(reward.timestamp * 1000).toLocaleString('pl-PL');
-          const row = `<tr>
-            <td>${date}</td>
-            <td>${reward.amount.toFixed(6)}</td>
-          </tr>`;
-          rewardsBody.innerHTML += row;
-        });
-
-      } catch (err) {
-        const rewardsBody = document.getElementById("rewards-body");
-        rewardsBody.innerHTML = `<tr><td colspan="2" style="color:red;">Błąd ładowania danych</td></tr>`;
-      }
-    }
-  </script>
+    </script>
 </body>
 </html>

@@ -1,7 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import requests
-from datetime import datetime
 
 app = FastAPI()
 
@@ -14,77 +13,54 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# API Endpoints
-INDEXER_URL = "https://mainnet-idx.algonode.cloud/v2"
-ALGOD_URL = "https://mainnet-api.algonode.cloud/v2"
-
-REWARDS_SENDER = "Y76M3MSY6DKBRHBL7C3NNDXGS5IIMQVQVUAB6MP4XEMMGVF2QWNPL226CA"
+# API endpoints
+ALGOD_API_URL = "https://mainnet-api.algonode.cloud/v2/accounts"
+INDEXER_API_URL = "https://mainnet-idx.algonode.cloud/v2/transactions"
 
 @app.get("/")
 def home():
     return {"message": "Algorand Node Monitor API is running"}
 
 @app.get("/account-info")
-def account_info(address: str):
-    # 1. Dane z Algod API
-    algod_response = requests.get(f"{ALGOD_URL}/accounts/{address}")
-    if algod_response.status_code != 200:
-        raise HTTPException(status_code=404, detail="Nie znaleziono konta w Algod API")
+def get_account_info(address: str):
+    response = requests.get(f"{ALGOD_API_URL}/{address}")
+    if response.status_code != 200:
+        raise HTTPException(status_code=500, detail="Błąd pobierania danych konta")
 
-    algod_data = algod_response.json()["account"]
+    data = response.json()
+    
+    # BEZPIECZNE ODCZYTANIE DANYCH
+    account_data = data.get("account", data)
 
-    balance = algod_data.get("amount", 0) / 1_000_000  # microAlgos -> Algos
-    pending_rewards = algod_data.get("pending-rewards", 0) / 1_000_000
-
-    registered_for_rewards = algod_data.get("participation", {}).get("vote-participation-key") is not None
-
-    # 2. Pobranie ostatniego bloku
-    status_response = requests.get(f"{ALGOD_URL}/status")
-    if status_response.status_code != 200:
-        raise HTTPException(status_code=500, detail="Nie można pobrać statusu sieci")
-
-    status_data = status_response.json()
-    last_block_time = status_data.get("time-since-last-round", 0)
+    balance = account_data.get("amount", 0) / 1_000_000
+    pending_rewards = account_data.get("pending-rewards", 0) / 1_000_000
+    participation = account_data.get("participation", {})
+    
+    is_participating = "Tak" if participation else "Nie"
 
     return {
         "balance": balance,
         "pending_rewards": pending_rewards,
-        "registered_for_rewards": registered_for_rewards,
-        "last_block_time": last_block_time
+        "participating": is_participating
     }
 
 @app.get("/reward-history")
-def reward_history(address: str):
+def get_rewards_history(address: str):
+    params = {
+        "tx-type": "pay",
+        "receiver": address,
+        "sender": "Y76M3MSY6DKBRHBL7C3NNDXGS5IIMQVQVUAB6MP4XEMMGVF2QWNPL226CA",  # nagrody
+        "limit": 30
+    }
+    response = requests.get(INDEXER_API_URL, params=params)
+    if response.status_code != 200:
+        raise HTTPException(status_code=500, detail="Błąd pobierania historii nagród")
+
+    txns = response.json().get("transactions", [])
     rewards = []
-
-    next_token = ""
-    while True:
-        params = {
-            "asset-id": 0,
-            "address": address,
-            "tx-type": "pay",
-            "limit": 1000,
-            "next": next_token
-        }
-        url = f"{INDEXER_URL}/accounts/{address}/transactions"
-        response = requests.get(url, params=params)
-        if response.status_code != 200:
-            raise HTTPException(status_code=500, detail="Nie można pobrać historii transakcji")
-
-        data = response.json()
-        transactions = data.get("transactions", [])
-
-        for tx in transactions:
-            sender = tx.get("sender", "")
-            if sender == REWARDS_SENDER:
-                timestamp = tx.get("round-time")
-                amount = tx.get("payment-transaction", {}).get("amount", 0) / 1_000_000  # ALGO
-                date = datetime.utcfromtimestamp(timestamp).strftime("%d.%m.%Y %H:%M:%S")
-                rewards.append({"date": date, "amount": amount})
-
-        # Break if no more pages
-        if "next-token" not in data:
-            break
-        next_token = data["next-token"]
+    for txn in txns:
+        timestamp = txn.get("round-time")
+        amount = txn.get("payment-transaction", {}).get("amount", 0) / 1_000_000
+        rewards.append({"timestamp": timestamp, "amount": amount})
 
     return {"rewards": rewards}
